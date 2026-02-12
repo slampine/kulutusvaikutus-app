@@ -43,7 +43,7 @@
         <canvas id="mainChart"></canvas>
     </div>
     
-    <div class="refresh-hint">Päivittyy automaattisesti 15min välein.</div>
+    <div class="refresh-hint">Päivittyy automaattisesti 1h välein.</div>
 </div>
 
 <script>
@@ -115,7 +115,7 @@
     }
 
     loadData();
-    setInterval(loadData, 900000);
+    setInterval(loadData, 900000*4);
 </script>
 </body>
 </html>
