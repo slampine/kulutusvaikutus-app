@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Priima Live</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Priima">
+    
+    <link rel="manifest" href="data:application/manifest+json,{"name":"Priima Tracker","short_name":"Priima","start_url":".","display":"standalone","background_color":"#121212","theme_color":"#121212"}">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --bg: #121212; --card: #1e1e1e; --green: #2ecc71; --red: #e74c3c; --gray: #95a5a6; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: white; padding: env(safe-area-inset-top) 15px 15px 15px; margin: 0; overflow-x: hidden; }
+        .container { max-width: 600px; margin: auto; }
+        .stats { display: flex; justify-content: space-between; margin: 20px 0; background: var(--card); padding: 20px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .stat-box { text-align: center; }
+        .label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; display: block; }
+        .value { font-size: 1.3rem; font-weight: 700; display: block; }
+        #chart-wrapper { background: var(--card); padding: 15px; border-radius: 16px; height: 55vh; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .refresh-hint { font-size: 0.7rem; color: #555; margin-top: 15px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div style="padding-top: 10px; text-align: left;">
+        <h2 style="margin: 0; font-size: 1.5rem;">Sähkövahti</h2>
+    </div>
+
+    <div class="stats">
+        <div class="stat-box"><span class="label">Nyt</span><span class="value" id="now">--</span></div>
+        <div class="stat-box"><span class="label">Kk Keski</span><span class="value" id="avg">--</span></div>
+        <div class="stat-box"><span class="label">Vaikutus</span><span class="value" id="impact">--</span></div>
+    </div>
+
+    <div id="chart-wrapper">
+        <canvas id="mainChart"></canvas>
+    </div>
+    
+    <div class="refresh-hint">Päivittyy automaattisesti 15min välein.</div>
+</div>
+
+<script>
+    let chart;
+    async function loadData() {
+        try {
+            const url = "https://sahkotin.fi/prices?quarter&fix&vat";
+            const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+            const res = await fetch(proxy);
+            const wrapper = await res.json();
+            const data = JSON.parse(wrapper.contents).prices;
+
+            const now = new Date();
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            
+            // Calc Month Avg
+            const pastData = data.filter(p => new Date(p.date) >= startOfMonth && new Date(p.date) <= now);
+            const monthAvg = pastData.reduce((s, p) => s + p.value, 0) / pastData.length;
+
+            // Filter Forecast (Now -> Tomorrow Midnight)
+            const endLimit = new Date();
+            endLimit.setDate(endLimit.getDate() + 1);
+            endLimit.setHours(23, 59, 0);
+            
+            const futurePoints = data.filter(p => {
+                const d = new Date(p.date);
+                return d >= now && d <= endLimit;
+            });
+
+            const currentPrice = data.find(p => new Date(p.date) <= now && new Date(p.date) > new Date(now - 900000))?.value || 0;
+
+            document.getElementById('now').innerText = currentPrice.toFixed(2) + "c";
+            document.getElementById('avg').innerText = monthAvg.toFixed(2) + "c";
+            const impact = currentPrice - monthAvg;
+            const impEl = document.getElementById('impact');
+            impEl.innerText = (impact > 0 ? "+" : "") + impact.toFixed(2);
+            impEl.style.color = impact <= 0 ? "var(--green)" : "var(--red)";
+
+            render(futurePoints, monthAvg);
+        } catch (e) { console.error("Update failed", e); }
+    }
+
+    function render(points, avg) {
+        const ctx = document.getElementById('mainChart').getContext('2d');
+        if (chart) chart.destroy();
+        
+        chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: points.map(p => {
+                    const d = new Date(p.date);
+                    return d.getMinutes() === 0 ? d.getHours() + ":00" : "";
+                }),
+                datasets: [{
+                    data: points.map(p => p.value),
+                    backgroundColor: points.map(p => p.value < avg ? '#2ecc71' : '#e74c3c'),
+                    borderRadius: 3
+                }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                plugins: { legend: false },
+                scales: {
+                    y: { grid: { color: '#333' }, ticks: { color: '#888', font: { size: 10 } } },
+                    x: { grid: { display: false }, ticks: { color: '#666', autoSkip: false, font: { size: 9 } } }
+                }
+            }
+        });
+    }
+
+    loadData();
+    setInterval(loadData, 900000);
+</script>
+</body>
+</html>
