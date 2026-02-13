@@ -88,56 +88,56 @@
     }
 
     function render(points, avg) {
-    const ctx = document.getElementById('mainChart').getContext('2d');
-    if (chart) chart.destroy();
+        const ctx = document.getElementById('mainChart').getContext('2d');
+        if (chart) chart.destroy();
     
-    chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: points.map(p => {
-                const d = new Date(p.date);
-                return d.getMinutes() === 0 ? d.getHours() + ":00" : "";
-            }),
-            datasets: [{
-                data: points.map(p => p.value),
-                backgroundColor: points.map(p => p.value < avg ? '#2ecc71' : '#e74c3c'),
-                borderRadius: 3
-            }]
-        },
-        options: {
-            maintainAspectRatio: false,
-            plugins: {
-                legend: false,
-                // --- ADD THIS SECTION ---
-                annotation: {
-                    annotations: {
-                        line1: {
-                            type: 'line',
-                            yMin: avg,
-                            yMax: avg,
-                            borderColor: 'white',
-                            borderWidth: 2,
-                            borderDash: [6, 6], // Makes the line dashed
-                            label: {
-                                display: true,
-                                content: 'Avg: ' + avg.toFixed(2),
-                                position: 'end',
-                                backgroundColor: 'rgba(0,0,0,0.5)',
-                                color: '#fff',
-                                font: { size: 10 }
+        chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: points.map(p => {
+                    const d = new Date(p.date);
+                    return d.getMinutes() === 0 ? d.getHours() + ":00" : "";
+                }),
+                datasets: [{
+                    data: points.map(p => p.value),
+                    backgroundColor: points.map(p => p.value < avg ? '#2ecc71' : '#e74c3c'),
+                    borderRadius: 3
+                }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: false,
+                    // --- ADD THIS SECTION ---
+                    annotation: {
+                        annotations: {
+                            line1: {
+                                type: 'line',
+                                yMin: avg,
+                                yMax: avg,
+                                borderColor: 'white',
+                                borderWidth: 2,
+                                borderDash: [6, 6], // Makes the line dashed
+                                label: {
+                                    display: true,
+                                    content: 'Avg: ' + avg.toFixed(2),
+                                    position: 'end',
+                                    backgroundColor: 'rgba(0,0,0,0.5)',
+                                    color: '#fff',
+                                    font: { size: 10 }
+                                }
                             }
                         }
                     }
+                    // ------------------------
+                },
+                scales: {
+                    y: { grid: { color: '#333' }, ticks: { color: '#888', font: { size: 10 } } },
+                    x: { grid: { display: false }, ticks: { color: '#666', autoSkip: false, font: { size: 9 } } }
                 }
-                // ------------------------
-            },
-            scales: {
-                y: { grid: { color: '#333' }, ticks: { color: '#888', font: { size: 10 } } },
-                x: { grid: { display: false }, ticks: { color: '#666', autoSkip: false, font: { size: 9 } } }
             }
-        }
-    });
-}
+        });
+    }
 
     loadData();
     setInterval(loadData, 900000*4);
