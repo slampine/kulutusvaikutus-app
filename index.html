@@ -12,6 +12,7 @@
     <link rel="manifest" href="data:application/manifest+json,{"name":"Priima Tracker","short_name":"Priima","start_url":".","display":"standalone","background_color":"#121212","theme_color":"#121212"}">
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
     <style>
         :root { --bg: #121212; --card: #1e1e1e; --green: #2ecc71; --red: #e74c3c; --gray: #95a5a6; }
         body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: white; padding: env(safe-area-inset-top) 15px 15px 15px; margin: 0; overflow-x: hidden; }
@@ -87,32 +88,56 @@
     }
 
     function render(points, avg) {
-        const ctx = document.getElementById('mainChart').getContext('2d');
-        if (chart) chart.destroy();
-        
-        chart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: points.map(p => {
-                    const d = new Date(p.date);
-                    return d.getMinutes() === 0 ? d.getHours() + ":00" : "";
-                }),
-                datasets: [{
-                    data: points.map(p => p.value),
-                    backgroundColor: points.map(p => p.value < avg ? '#2ecc71' : '#e74c3c'),
-                    borderRadius: 3
-                }]
-            },
-            options: {
-                maintainAspectRatio: false,
-                plugins: { legend: false },
-                scales: {
-                    y: { grid: { color: '#333' }, ticks: { color: '#fff', font: { size: 10 } } },
-                    x: { grid: { display: false }, ticks: { color: '#fff', autoSkip: false, font: { size: 9 } } }
+    const ctx = document.getElementById('mainChart').getContext('2d');
+    if (chart) chart.destroy();
+    
+    chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: points.map(p => {
+                const d = new Date(p.date);
+                return d.getMinutes() === 0 ? d.getHours() + ":00" : "";
+            }),
+            datasets: [{
+                data: points.map(p => p.value),
+                backgroundColor: points.map(p => p.value < avg ? '#2ecc71' : '#e74c3c'),
+                borderRadius: 3
+            }]
+        },
+        options: {
+            maintainAspectRatio: false,
+            plugins: {
+                legend: false,
+                // --- ADD THIS SECTION ---
+                annotation: {
+                    annotations: {
+                        line1: {
+                            type: 'line',
+                            yMin: avg,
+                            yMax: avg,
+                            borderColor: 'white',
+                            borderWidth: 2,
+                            borderDash: [6, 6], // Makes the line dashed
+                            label: {
+                                display: true,
+                                content: 'Avg: ' + avg.toFixed(2),
+                                position: 'end',
+                                backgroundColor: 'rgba(0,0,0,0.5)',
+                                color: '#fff',
+                                font: { size: 10 }
+                            }
+                        }
+                    }
                 }
+                // ------------------------
+            },
+            scales: {
+                y: { grid: { color: '#333' }, ticks: { color: '#888', font: { size: 10 } } },
+                x: { grid: { display: false }, ticks: { color: '#666', autoSkip: false, font: { size: 9 } } }
             }
-        });
-    }
+        }
+    });
+}
 
     loadData();
     setInterval(loadData, 900000*4);
