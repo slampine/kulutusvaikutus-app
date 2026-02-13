@@ -1,7 +1,9 @@
+<!DOCTYPE html>
+<html lang="fi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sähkövahti</title>
+    <title>Priima Vahti</title>
     
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -11,96 +13,111 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
 
     <style>
-        :root { --bg: #121212; --card: #1e1e1e; --green: #2ecc71; --red: #e74c3c; }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); color: white; padding: 20px; margin: 0; }
+        :root { --bg: #0f0f0f; --card: #1a1a1a; --green: #2ecc71; --red: #e74c3c; --gray: #95a5a6; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: white; padding: env(safe-area-inset-top) 15px 15px 15px; margin: 0; }
         .container { max-width: 600px; margin: auto; }
-        .stats { display: flex; justify-content: space-between; margin: 20px 0; background: var(--card); padding: 20px; border-radius: 16px; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 15px 5px; }
+        .stats { display: flex; justify-content: space-between; margin-bottom: 20px; background: var(--card); padding: 20px; border-radius: 16px; border: 1px solid #333; }
         .stat-box { text-align: center; }
-        .label { font-size: 0.7rem; color: #888; text-transform: uppercase; }
-        .value { font-size: 1.2rem; font-weight: bold; display: block; }
-        #chart-wrapper { background: var(--card); padding: 15px; border-radius: 16px; height: 50vh; position: relative; }
-        #debug { font-size: 0.7rem; color: #444; text-align: center; margin-top: 10px; }
+        .label { font-size: 0.7rem; color: #777; text-transform: uppercase; margin-bottom: 4px; display: block; }
+        .value { font-size: 1.25rem; font-weight: 800; display: block; }
+        #chart-wrapper { background: var(--card); padding: 15px; border-radius: 16px; height: 55vh; border: 1px solid #333; }
+        #debug { font-size: 0.65rem; color: #444; text-align: center; margin-top: 15px; }
+        .info-btn { background: #333; border: none; color: #888; border-radius: 50%; width: 22px; height: 22px; font-size: 12px; cursor: pointer; }
     </style>
 </head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h2 style="margin: 0; font-size: 1.2rem; color: #eee;">Priima Vahti</h2>
+        <button class="info-btn" onclick="showInfo()">?</button>
+    </div>
+
+    <div class="stats">
+        <div class="stat-box"><span class="label">Nyt</span><span class="value" id="now">--</span></div>
+        <div class="stat-box"><span class="label">Kk Keski</span><span class="value" id="avg">--</span></div>
+        <div class="stat-box"><span class="label">Vaikutus</span><span class="value" id="impact">--</span></div>
+    </div>
+
+    <div id="chart-wrapper">
+        <canvas id="mainChart"></canvas>
+    </div>
+    
+    <div id="debug">Ladataan...</div>
+</div>
 
 <script>
     let chart;
+    const THRESHOLD = 1.0; // +/- 1.0 sentin "harmaa alue"
+
+    Chart.register(window['chartjs-plugin-annotation']);
+
+    function showInfo() {
+        const avg = document.getElementById('avg').innerText;
+        alert(`KULUTUSVAIKUTUS-OPAS:\n\n` +
+              `KA: Kuukauden pörssihinnan keskiarvo tähän asti.\n\n` +
+              `VÄRIT:\n` +
+              `• VIHREÄ: Yli ${THRESHOLD}c alle keskiarvon (Säästät rahaa)\n` +
+              `• HARMAA: Lähellä keskiarvoa (Neutraali)\n` +
+              `• PUNAINEN: Yli ${THRESHOLD}c yli keskiarvon (Kallis tunti)`);
+    }
 
     async function loadData() {
         const debug = document.getElementById('debug');
         const targetUrl = "https://sahkotin.fi/prices?quarter&fix&vat";
-        
-        // Try multiple proxies in case one is down/blocking
-        const proxies = [
-            `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
-            `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`
-        ];
+        const proxy = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
-        for (let proxy of proxies) {
-            try {
-                debug.innerText = "Yritetään hakea tietoja...";
-                const res = await fetch(proxy);
-                if (!res.ok) throw new Error("Proxy error");
-                
-                let data;
-                const text = await res.text();
-                
-                // AllOrigins returns a wrapper, corsproxy returns raw JSON
-                try {
-                    const json = JSON.parse(text);
-                    data = json.contents ? JSON.parse(json.contents).prices : json.prices;
-                } catch(e) {
-                    throw new Error("JSON parse error");
-                }
-
-                if (data) {
-                    processData(data);
-                    debug.innerText = "Päivitetty: " + new Date().toLocaleTimeString();
-                    return; // Success!
-                }
-            } catch (e) {
-                console.warn("Proxy failed, trying next...", e);
+        try {
+            const res = await fetch(proxy);
+            if (!res.ok) throw new Error("Haku epäonnistui");
+            const data = await res.json();
+            
+            if (data && data.prices) {
+                processData(data.prices);
+                debug.innerText = "Päivitetty: " + new Date().toLocaleTimeString('fi-FI');
             }
+        } catch (e) {
+            debug.innerText = "Virhe tietojen haussa. Yritetään uudelleen...";
+            console.error(e);
         }
-        debug.innerText = "Virhe: Kaikki välityspalvelimet epäonnistuivat.";
     }
 
-    function processData(data) {
+    function processData(prices) {
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         
-        const pastData = data.filter(p => new Date(p.date) >= startOfMonth && new Date(p.date) <= now);
-        const monthAvg = pastData.reduce((s, p) => s + p.value, 0) / (pastData.length || 1);
+        const pastData = prices.filter(p => new Date(p.date) >= startOfMonth && new Date(p.date) <= now);
+        const monthAvg = pastData.length > 0 ? (pastData.reduce((s, p) => s + p.value, 0) / pastData.length) : 0;
 
         const endLimit = new Date();
         endLimit.setDate(endLimit.getDate() + 1);
         endLimit.setHours(23, 59, 0);
         
-        const futurePoints = data.filter(p => {
+        const futurePoints = prices.filter(p => {
             const d = new Date(p.date);
             return d >= now && d <= endLimit;
         });
 
-        const currentPrice = data.find(p => new Date(p.date) <= now && new Date(p.date) > new Date(now - 900000))?.value || 0;
+        const currentPrice = prices.find(p => new Date(p.date) <= now && new Date(p.date) > new Date(now - 900000))?.value || 0;
 
-        document.getElementById('now').innerText = currentPrice.toFixed(2) + "c";
-        document.getElementById('avg').innerText = monthAvg.toFixed(2) + "c";
+        document.getElementById('now').innerText = currentPrice.toFixed(2) + " c";
+        document.getElementById('avg').innerText = monthAvg.toFixed(2) + " c";
+        
         const impact = currentPrice - monthAvg;
         const impEl = document.getElementById('impact');
         impEl.innerText = (impact > 0 ? "+" : "") + impact.toFixed(2);
-        impEl.style.color = impact <= 0 ? "var(--green)" : "var(--red)";
+        
+        // Stats text color logic
+        if (impact < -THRESHOLD) impEl.style.color = "var(--green)";
+        else if (impact > THRESHOLD) impEl.style.color = "var(--red)";
+        else impEl.style.color = "var(--gray)";
 
-        render(futurePoints, monthAvg);
+        renderChart(futurePoints, monthAvg);
     }
 
-    function render(points, avg) {
+    function renderChart(points, avg) {
         const ctx = document.getElementById('mainChart').getContext('2d');
-        
-        // Register the plugin specifically
-        if (typeof ChartAnnotation !== 'undefined') {
-            Chart.register(ChartAnnotation);
-        }
-
         if (chart) chart.destroy();
         
         chart = new Chart(ctx, {
@@ -112,8 +129,13 @@
                 }),
                 datasets: [{
                     data: points.map(p => p.value),
-                    backgroundColor: points.map(p => p.value < avg ? '#2ecc71' : '#e74c3c'),
-                    borderRadius: 3
+                    backgroundColor: points.map(p => {
+                        if (p.value < (avg - THRESHOLD)) return '#2ecc71'; // Vihreä
+                        if (p.value > (avg + THRESHOLD)) return '#e74c3c'; // Punainen
+                        return '#95a5a6'; // Harmaa (Neutraali)
+                    }),
+                    borderRadius: 3,
+                    borderSkipped: false
                 }]
             },
             options: {
@@ -123,27 +145,38 @@
                     legend: false,
                     annotation: {
                         annotations: {
+                            // Harmaa vyöhyke (Box)
+                            box1: {
+                                type: 'box',
+                                scaleID: 'y',
+                                yMin: avg - THRESHOLD,
+                                yMax: avg + THRESHOLD,
+                                backgroundColor: 'rgba(150, 150, 150, 0.08)',
+                                borderWidth: 0,
+                            },
+                            // Keskiarvoviiva
                             line1: {
                                 type: 'line',
-                                yMin: avg, yMax: avg,
-                                borderColor: 'rgba(255,255,255,0.5)',
-                                borderWidth: 2,
+                                scaleID: 'y',
+                                value: avg,
+                                borderColor: 'rgba(255, 255, 255, 0.4)',
+                                borderWidth: 1,
                                 borderDash: [5, 5],
                                 label: {
                                     display: true,
                                     content: 'KA: ' + avg.toFixed(2),
                                     position: 'end',
-                                    backgroundColor: 'black',
-                                    color: 'white',
-                                    font: { size: 10 }
+                                    backgroundColor: 'rgba(0,0,0,0.8)',
+                                    color: '#fff',
+                                    font: { size: 10, weight: 'bold' }
                                 }
                             }
                         }
                     }
                 },
                 scales: {
-                    y: { grid: { color: '#333' }, ticks: { color: '#888' } },
-                    x: { grid: { display: false }, ticks: { color: '#666', autoSkip: false, font: { size: 9 } } }
+                    y: { grid: { color: '#222' }, ticks: { color: '#666', font: { size: 10 } } },
+                    x: { grid: { display: false }, ticks: { color: '#555', autoSkip: false, font: { size: 9 } } }
                 }
             }
         });
@@ -152,3 +185,5 @@
     loadData();
     setInterval(loadData, 900000);
 </script>
+</body>
+</html>
