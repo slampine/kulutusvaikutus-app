@@ -48,6 +48,11 @@
 </div>
 
 <script>
+    // 1. CACHE BUSTER: If the URL doesn't have a version, force a reload with one
+    if (!window.location.search.includes('v=')) {
+        window.location.href = window.location.pathname + '?v=' + Date.now();
+    }
+
     let chart;
     const THRESHOLD = 1.0; 
 
