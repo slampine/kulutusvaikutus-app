@@ -58,33 +58,39 @@
 
     Chart.register(window['chartjs-plugin-annotation']);
 
-    async function loadData() {
+async function loadData() {
         const debug = document.getElementById('debug');
-        // This API is CORS-friendly and includes 25.5% VAT
-        const targetUrl = "https://api.porssisahko.net/v1/latest-prices.json";
+        
+        // Elering API: Finland region (ee), automatically handles CORS for browsers
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const end = new Date(now.getTime() + 172800000).toISOString(); // +2 days
+        
+        const targetUrl = `https://dashboard.elering.ee/api/nps/price?start=${start}&end=${end}`;
 
         try {
             const res = await fetch(targetUrl);
             if (!res.ok) throw new Error("Haku epäonnistui");
-            const data = await res.json();
+            const json = await res.json();
             
-            if (data && data.prices) {
-                // Map the Pörssisähkö.net fields to our app's format
-                const formattedPrices = data.prices.map(p => ({
-                    date: p.startDate, // API uses startDate
-                    value: p.price    // API uses price
-                })).reverse(); // Reverse to get chronological order (past to future)
+            if (json && json.data && json.data.fi) {
+                const formattedPrices = json.data.fi.map(p => ({
+                    // Elering gives timestamp in seconds, we need milliseconds
+                    date: new Date(p.timestamp * 1000), 
+                    // Elering gives €/MWh, we convert to c/kWh and add 25.5% VAT
+                    value: (p.price / 10) * 1.255 
+                }));
 
                 processData(formattedPrices);
                 debug.innerText = "Päivitetty: " + new Date().toLocaleTimeString('fi-FI');
             }
         } catch (e) {
             debug.innerText = "Haku epäonnistui. Yritetään uudelleen...";
-            console.error(e);
+            console.error("API Error:", e);
             setTimeout(loadData, 30000); 
         }
     }
-
+    
     function processData(prices) {
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
