@@ -86,6 +86,7 @@
         } catch (e) {
             debug.innerText = "Virhe tietojen haussa. Yritetään uudelleen...";
             console.error(e);
+            setTimeout(loadData, 30000); // Try again in 30 seconds if it fails
         }
     }
 
