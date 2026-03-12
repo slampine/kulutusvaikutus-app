@@ -48,7 +48,7 @@
 </div>
 
 <script>
-    // 1. CACHE BUSTER: If the URL doesn't have a version, force a reload with one
+    // 1. CACHE BUSTER: Prevents the "stuck on old version" issue
     if (!window.location.search.includes('v=')) {
         window.location.href = window.location.pathname + '?v=' + Date.now();
     }
@@ -58,18 +58,9 @@
 
     Chart.register(window['chartjs-plugin-annotation']);
 
-    function showInfo() {
-        const avg = document.getElementById('avg').innerText;
-        alert(`KULUTUSVAIKUTUS-OPAS:\n\n` +
-              `KA: Kuukauden pörssihinnan keskiarvo tähän asti.\n\n` +
-              `VÄRIT:\n` +
-              `• VIHREÄ: Yli ${THRESHOLD}c alle keskiarvon (Säästät rahaa)\n` +
-              `• HARMAA: Lähellä keskiarvoa (Neutraali)\n` +
-              `• PUNAINEN: Yli ${THRESHOLD}c yli keskiarvon (Kallis tunti)`);
-    }
-
     async function loadData() {
         const debug = document.getElementById('debug');
+        // This API is CORS-friendly and includes 25.5% VAT
         const targetUrl = "https://api.porssisahko.net/v1/latest-prices.json";
 
         try {
@@ -78,44 +69,49 @@
             const data = await res.json();
             
             if (data && data.prices) {
-                // IMPORTANT: The API gives newest first, we need oldest first for the chart
+                // Map the Pörssisähkö.net fields to our app's format
                 const formattedPrices = data.prices.map(p => ({
-                    date: p.startDate,
-                    value: p.price
-                })).reverse(); 
+                    date: p.startDate, // API uses startDate
+                    value: p.price    // API uses price
+                })).reverse(); // Reverse to get chronological order (past to future)
 
                 processData(formattedPrices);
                 debug.innerText = "Päivitetty: " + new Date().toLocaleTimeString('fi-FI');
             }
         } catch (e) {
-            debug.innerText = "Virhe haussa. Yritetään uudelleen...";
+            debug.innerText = "Haku epäonnistui. Yritetään uudelleen...";
+            console.error(e);
             setTimeout(loadData, 30000); 
         }
     }
-    
+
     function processData(prices) {
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         
-        // Calculate average for the visible data set
+        // 1. Calculate Monthly Average
         const pastData = prices.filter(p => new Date(p.date) >= startOfMonth && new Date(p.date) <= now);
         const monthAvg = pastData.length > 0 ? (pastData.reduce((s, p) => s + p.value, 0) / pastData.length) : 0;
 
-        // Determine what to show on the chart (current time until end of tomorrow)
+        // 2. Find "Now" Price (The hour block we are currently in)
+        const currentPrice = prices.find(p => {
+            const d = new Date(p.date);
+            const nextHour = new Date(d.getTime() + 3600000);
+            return d <= now && nextHour > now;
+        })?.value || 0;
+
+        // 3. Filter Chart Points (Starting from an hour ago until tomorrow night)
+        const displayStart = new Date(now.getTime() - 3600000);
         const endLimit = new Date();
         endLimit.setDate(endLimit.getDate() + 1);
         endLimit.setHours(23, 59, 0);
         
-        const futurePoints = prices.filter(p => {
+        const chartPoints = prices.filter(p => {
             const d = new Date(p.date);
-            return d >= new Date(now.getTime() - 3600000) && d <= endLimit;
+            return d >= displayStart && d <= endLimit;
         });
 
-        const currentPrice = prices.find(p => {
-            const d = new Date(p.date);
-            return d <= now && new Date(d.getTime() + 3600000) > now;
-        })?.value || 0;
-
+        // Update UI
         document.getElementById('now').innerText = currentPrice.toFixed(2) + " c";
         document.getElementById('avg').innerText = monthAvg.toFixed(2) + " c";
         
@@ -127,7 +123,7 @@
         else if (impact > THRESHOLD) impEl.style.color = "var(--red)";
         else impEl.style.color = "var(--gray)";
 
-        renderChart(futurePoints, monthAvg);
+        renderChart(chartPoints, monthAvg);
     }
 
     function renderChart(points, avg) {
@@ -188,7 +184,7 @@
                 },
                 scales: {
                     y: { grid: { color: '#222' }, ticks: { color: '#fff' } },
-                    x: { grid: { display: false }, ticks: { color: '#fff', font: { size: 9 } } }
+                    x: { grid: { display: false }, ticks: { color: '#fff', font: { size: 9 }, maxRotation: 0 } }
                 }
             }
         });
