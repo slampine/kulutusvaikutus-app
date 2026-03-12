@@ -49,7 +49,7 @@
 
 <script>
     let chart;
-    const THRESHOLD = 1.0; // +/- 1.0 sentin "harmaa alue"
+    const THRESHOLD = 1.0; 
 
     Chart.register(window['chartjs-plugin-annotation']);
 
@@ -65,16 +65,22 @@
 
     async function loadData() {
         const debug = document.getElementById('debug');
-        const targetUrl = "https://sahkotin.fi/prices?quarter&fix&vat";
-        const proxy = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+        // New API: More stable and doesn't need a proxy
+        const targetUrl = "https://api.porssisahko.net/v1/latest-prices.json";
 
         try {
-            const res = await fetch(proxy);
+            const res = await fetch(targetUrl);
             if (!res.ok) throw new Error("Haku epäonnistui");
             const data = await res.json();
             
             if (data && data.prices) {
-                processData(data.prices);
+                // The new API returns prices in descending order, we reverse it for the chart
+                const formattedPrices = data.prices.map(p => ({
+                    date: p.startDate,
+                    value: p.price
+                })).reverse();
+
+                processData(formattedPrices);
                 debug.innerText = "Päivitetty: " + new Date().toLocaleTimeString('fi-FI');
             }
         } catch (e) {
@@ -87,19 +93,24 @@
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         
+        // Calculate average for the visible data set
         const pastData = prices.filter(p => new Date(p.date) >= startOfMonth && new Date(p.date) <= now);
         const monthAvg = pastData.length > 0 ? (pastData.reduce((s, p) => s + p.value, 0) / pastData.length) : 0;
 
+        // Determine what to show on the chart (current time until end of tomorrow)
         const endLimit = new Date();
         endLimit.setDate(endLimit.getDate() + 1);
         endLimit.setHours(23, 59, 0);
         
         const futurePoints = prices.filter(p => {
             const d = new Date(p.date);
-            return d >= now && d <= endLimit;
+            return d >= new Date(now.getTime() - 3600000) && d <= endLimit;
         });
 
-        const currentPrice = prices.find(p => new Date(p.date) <= now && new Date(p.date) > new Date(now - 900000))?.value || 0;
+        const currentPrice = prices.find(p => {
+            const d = new Date(p.date);
+            return d <= now && new Date(d.getTime() + 3600000) > now;
+        })?.value || 0;
 
         document.getElementById('now').innerText = currentPrice.toFixed(2) + " c";
         document.getElementById('avg').innerText = monthAvg.toFixed(2) + " c";
@@ -108,7 +119,6 @@
         const impEl = document.getElementById('impact');
         impEl.innerText = (impact > 0 ? "+" : "") + impact.toFixed(2);
         
-        // Stats text color logic
         if (impact < -THRESHOLD) impEl.style.color = "var(--green)";
         else if (impact > THRESHOLD) impEl.style.color = "var(--red)";
         else impEl.style.color = "var(--gray)";
@@ -125,14 +135,14 @@
             data: {
                 labels: points.map(p => {
                     const d = new Date(p.date);
-                    return d.getMinutes() === 0 ? d.getHours() + ":00" : "";
+                    return d.getHours() + ":00";
                 }),
                 datasets: [{
                     data: points.map(p => p.value),
                     backgroundColor: points.map(p => {
-                        if (p.value < (avg - THRESHOLD)) return '#2ecc71'; // Vihreä
-                        if (p.value > (avg + THRESHOLD)) return '#e74c3c'; // Punainen
-                        return '#95a5a6'; // Harmaa (Neutraali)
+                        if (p.value < (avg - THRESHOLD)) return '#2ecc71'; 
+                        if (p.value > (avg + THRESHOLD)) return '#e74c3c'; 
+                        return '#95a5a6';
                     }),
                     borderRadius: 3,
                     borderSkipped: false
@@ -145,7 +155,6 @@
                     legend: false,
                     annotation: {
                         annotations: {
-                            // Harmaa vyöhyke (Box)
                             box1: {
                                 type: 'box',
                                 scaleID: 'y',
@@ -154,7 +163,6 @@
                                 backgroundColor: 'rgba(150, 150, 150, 0.08)',
                                 borderWidth: 0,
                             },
-                            // Keskiarvoviiva
                             line1: {
                                 type: 'line',
                                 scaleID: 'y',
@@ -175,8 +183,8 @@
                     }
                 },
                 scales: {
-                    y: { grid: { color: '#222' }, ticks: { color: '#fff', font: { size: 11 } } },
-                    x: { grid: { display: false }, ticks: { color: '#fff', autoSkip: false, font: { size: 11 } } }
+                    y: { grid: { color: '#222' }, ticks: { color: '#fff' } },
+                    x: { grid: { display: false }, ticks: { color: '#fff', font: { size: 9 } } }
                 }
             }
         });
