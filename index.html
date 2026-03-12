@@ -58,34 +58,28 @@
 
     Chart.register(window['chartjs-plugin-annotation']);
 
-async function loadData() {
+    async function loadData() {
         const debug = document.getElementById('debug');
-        
-        // Elering API: Finland region (ee), automatically handles CORS for browsers
-        const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        const end = new Date(now.getTime() + 172800000).toISOString(); // +2 days
-        
-        const targetUrl = `https://dashboard.elering.ee/api/nps/price?start=${start}&end=${end}`;
+        // This API is specifically built for browser-side fetches
+        const targetUrl = "https://shiko.fi/api/prices";
 
         try {
             const res = await fetch(targetUrl);
             if (!res.ok) throw new Error("Haku epäonnistui");
-            const json = await res.json();
+            const data = await res.json();
             
-            if (json && json.data && json.data.fi) {
-                const formattedPrices = json.data.fi.map(p => ({
-                    // Elering gives timestamp in seconds, we need milliseconds
-                    date: new Date(p.timestamp * 1000), 
-                    // Elering gives €/MWh, we convert to c/kWh and add 25.5% VAT
-                    value: (p.price / 10) * 1.255 
+            // Shiko returns { prices: [ { time, price_with_vat }, ... ] }
+            if (data && data.prices) {
+                const formattedPrices = data.prices.map(p => ({
+                    date: new Date(p.time), 
+                    value: p.price_with_vat
                 }));
 
                 processData(formattedPrices);
                 debug.innerText = "Päivitetty: " + new Date().toLocaleTimeString('fi-FI');
             }
         } catch (e) {
-            debug.innerText = "Haku epäonnistui. Yritetään uudelleen...";
+            debug.innerText = "Yhteysvirhe. Yritetään uudelleen...";
             console.error("API Error:", e);
             setTimeout(loadData, 30000); 
         }
