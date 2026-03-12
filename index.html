@@ -65,7 +65,6 @@
 
     async function loadData() {
         const debug = document.getElementById('debug');
-        // New API: More stable and doesn't need a proxy
         const targetUrl = "https://api.porssisahko.net/v1/latest-prices.json";
 
         try {
@@ -74,22 +73,21 @@
             const data = await res.json();
             
             if (data && data.prices) {
-                // The new API returns prices in descending order, we reverse it for the chart
+                // IMPORTANT: The API gives newest first, we need oldest first for the chart
                 const formattedPrices = data.prices.map(p => ({
                     date: p.startDate,
                     value: p.price
-                })).reverse();
+                })).reverse(); 
 
                 processData(formattedPrices);
                 debug.innerText = "Päivitetty: " + new Date().toLocaleTimeString('fi-FI');
             }
         } catch (e) {
-            debug.innerText = "Virhe tietojen haussa. Yritetään uudelleen...";
-            console.error(e);
-            setTimeout(loadData, 30000); // Try again in 30 seconds if it fails
+            debug.innerText = "Virhe haussa. Yritetään uudelleen...";
+            setTimeout(loadData, 30000); 
         }
     }
-
+    
     function processData(prices) {
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
