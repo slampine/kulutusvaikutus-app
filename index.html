@@ -60,27 +60,30 @@
 
     async function loadData() {
         const debug = document.getElementById('debug');
-        // This API is specifically built for browser-side fetches
-        const targetUrl = "https://shiko.fi/api/prices";
+        // We use a different proxy that wraps the response in a "safe" object
+        const targetUrl = encodeURIComponent("https://api.porssisahko.net/v1/latest-prices.json");
+        const proxyUrl = `https://api.allorigins.win/get?url=${targetUrl}`;
 
         try {
-            const res = await fetch(targetUrl);
-            if (!res.ok) throw new Error("Haku epäonnistui");
-            const data = await res.json();
+            const res = await fetch(proxyUrl);
+            if (!res.ok) throw new Error("Verkkovirhe");
+            const wrapper = await res.json();
             
-            // Shiko returns { prices: [ { time, price_with_vat }, ... ] }
+            // AllOrigins wraps the result in a 'contents' string
+            const data = JSON.parse(wrapper.contents);
+            
             if (data && data.prices) {
                 const formattedPrices = data.prices.map(p => ({
-                    date: new Date(p.time), 
-                    value: p.price_with_vat
-                }));
+                    date: new Date(p.startDate),
+                    value: p.price
+                })).reverse();
 
                 processData(formattedPrices);
                 debug.innerText = "Päivitetty: " + new Date().toLocaleTimeString('fi-FI');
             }
         } catch (e) {
-            debug.innerText = "Yhteysvirhe. Yritetään uudelleen...";
-            console.error("API Error:", e);
+            debug.innerText = "Haku epäonnistui (CORS/Network). Yritetään uudelleen...";
+            console.error("Fetch failed:", e);
             setTimeout(loadData, 30000); 
         }
     }
